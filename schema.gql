@@ -1,0 +1,39 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type Beer {
+  count: Int!
+  discordID: String!
+  discordUser: String
+  id: Int!
+}
+
+type BeerStats {
+  id: Int!
+  lastUpdated: String
+  total: Int!
+}
+
+input CreateBeerInput {
+  count: Int
+  discordID: String!
+  discordUser: String
+}
+
+type Mutation {
+  createBeer(input: CreateBeerInput!): Beer!
+  deleteBeer(discordID: String!): Boolean!
+  updateBeer(discordID: String!, input: UpdateBeerInput!): Beer!
+}
+
+type Query {
+  beer(discordID: String!): Beer
+  beerStats: BeerStats
+  beers: [Beer!]!
+}
+
+input UpdateBeerInput {
+  count: Int
+  discordUser: String
+}

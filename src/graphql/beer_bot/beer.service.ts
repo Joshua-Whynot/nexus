@@ -19,6 +19,11 @@ export class BeerService {
         return this.db.prepare('SELECT id, total, lastUpdated FROM beer_stats WHERE id = 1').get();
     }
 
+    setStats(total: number, lastUpdated: string | null) {
+        this.db.prepare('INSERT OR REPLACE INTO beer_stats(id, total, lastUpdated) VALUES (1, ?, ?)').run(total, lastUpdated);
+        return this.getStats();
+    }
+
     // Mutations return operation descriptors instead of executing them directly
     createOp(payload: { discordID: string; discordUser?: string; count?: number }): Operation {
         return {

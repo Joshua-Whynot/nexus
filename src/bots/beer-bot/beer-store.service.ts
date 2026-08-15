@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Message, TextChannel, Collection } from 'discord.js';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import { Collection, Message, TextChannel } from 'discord.js';
+import { DbExecutor } from '../../common/db.executor';
+import { BeerService } from '../../graphql/beer_bot/beer.service';
 
 export interface UserTally {
   username: string;
@@ -15,14 +15,18 @@ export interface BeerData {
 }
 
 /**
- * Owns all beer state: reading/writing the JSON file, applying `!beer`
- * changes, and rebuilding the tally from channel history. Commands depend on
- * this rather than touching the file directly.
+ * Owns all beer state for the bot and delegates persistence to the GraphQL
+ * `BeerService` / `DbExecutor` stack. Commands continue to depend on this
+ * service for in-memory formatting and applying `!beer` changes.
  */
 @Injectable()
 export class BeerStore {
   private readonly logger = new Logger(BeerStore.name);
-  private readonly dataPath = path.join(process.cwd(), 'beer-count.json');
+
+  constructor(
+    private readonly beerService: BeerService,
+    private readonly executor: DbExecutor,
+  ) { }
 
   /**
    * Returns the most human-readable name for a message author:
@@ -37,15 +41,10 @@ export class BeerStore {
   }
 
   /** Renders a sorted "1. Name — 🍺 N" leaderboard string. */
-  formatLeaderboard(
-    users: Record<string, UserTally>,
-    emptyMessage: string,
-  ): string {
+  formatLeaderboard(users: Record<string, UserTally>, emptyMessage: string): string {
     const sorted = Object.values(users).sort((a, b) => b.count - a.count);
     if (sorted.length === 0) return emptyMessage;
-    return sorted
-      .map((u, i) => `**${i + 1}.** ${u.username} — 🍺 ${u.count}`)
-      .join('\n');
+    return sorted.map((u, i) => `**${i + 1}.** ${u.username} — 🍺 ${u.count}`).join('\n');
   }
 
   /** Applies a (positive or negative) change for a `!beer` message. */
@@ -53,39 +52,58 @@ export class BeerStore {
     message: Message,
     amount: number,
   ): Promise<{ data: BeerData; userCount: number; displayName: string }> {
-    const data = await this.load();
     const userId = message.author.id;
     const displayName = this.getDisplayName(message);
 
-    if (!data.users[userId]) {
-      data.users[userId] = { username: displayName, count: 0 };
-    }
-    data.users[userId].username = displayName;
-    data.users[userId].count += amount;
-    data.total += amount;
-    data.lastUpdated = new Date().toISOString();
-    await this.save(data);
+    // Load current user row (if any)
+    const existing = this.beerService.findOne(userId);
 
-    return { data, userCount: data.users[userId].count, displayName };
+    let op;
+    if (!existing) {
+      // create new user row with initial count = amount
+      op = this.beerService.createOp({ discordID: userId, discordUser: displayName, count: amount });
+    } else {
+      // compute new count
+      const newCount = (existing.count ?? 0) + amount;
+      op = this.beerService.updateOp(userId, { discordUser: displayName, count: newCount });
+    }
+
+    // apply the operation
+    this.executor.apply([op]);
+
+    // recompute totals from DB and update stats
+    const rows = this.beerService.findAll();
+    let total = 0;
+    const users: Record<string, UserTally> = {};
+    for (const r of rows) {
+      users[r.discordID] = { username: r.discordUser ?? r.discordID, count: r.count };
+      total += Number(r.count) || 0;
+    }
+
+    const lastUpdated = new Date().toISOString();
+    this.beerService.setStats(total, lastUpdated);
+
+    const data: BeerData = { total, users, lastUpdated };
+    const userCount = users[userId]?.count ?? 0;
+    return { data, userCount, displayName };
   }
 
   async load(): Promise<BeerData> {
-    try {
-      const content = await fs.readFile(this.dataPath, 'utf-8');
-      const parsed = JSON.parse(content) as Partial<BeerData>;
-      return {
-        total: parsed.total ?? 0,
-        users: parsed.users ?? {},
-        lastUpdated: parsed.lastUpdated ?? new Date().toISOString(),
-      };
-    } catch {
-      // If file doesn't exist, return default data
-      return { total: 0, users: {}, lastUpdated: new Date().toISOString() };
+    const rows = this.beerService.findAll();
+    const users: Record<string, UserTally> = {};
+    let total = 0;
+    for (const r of rows) {
+      users[r.discordID] = { username: r.discordUser ?? r.discordID, count: r.count };
+      total += Number(r.count) || 0;
     }
+    const stats = this.beerService.getStats();
+    const lastUpdated = stats?.lastUpdated ?? new Date().toISOString();
+    return { total, users, lastUpdated };
   }
 
-  async save(data: BeerData): Promise<void> {
-    await fs.writeFile(this.dataPath, JSON.stringify(data, null, 2), 'utf-8');
+  // `save` is a no-op because operations are applied via DbExecutor
+  async save(_: BeerData): Promise<void> {
+    return;
   }
 
   /**
@@ -121,7 +139,7 @@ export class BeerStore {
     }[] = [];
     let before: string | undefined;
 
-    for (;;) {
+    for (; ;) {
       const batch: Collection<string, Message> = await channel.messages.fetch({
         limit: 100,
         before,

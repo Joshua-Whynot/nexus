@@ -6,9 +6,10 @@ export class Beer {
     id: number;
 
     @Field()
+    @Field(() => String)
     discordID: string;
 
-    @Field({ nullable: true })
+    @Field(() => String, { nullable: true })
     discordUser?: string | null;
 
     @Field(() => Int)
@@ -18,11 +19,11 @@ export class Beer {
 @ObjectType()
 export class BeerStats {
     @Field(() => Int)
-    id: 1;
+    id: number;
 
     @Field(() => Int)
     total: number;
 
-    @Field({ nullable: true })
+    @Field(() => String, { nullable: true })
     lastUpdated: string | null;
 }
