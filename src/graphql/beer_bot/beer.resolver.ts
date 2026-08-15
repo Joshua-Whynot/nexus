@@ -1,89 +1,49 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { DbExecutor } from '../../common/db.executor';
+import { BeerService } from './beer.service';
 import { Beer, BeerStats } from './beer.types';
-const Database = require('better-sqlite3');
-const path = require('path');
-
-const dbPath = path.join(process.cwd(), 'data', 'beers.db');
+import { CreateBeerInput } from './create-beer.input';
+import { UpdateBeerInput } from './update-beer.input';
 
 @Resolver(() => Beer)
 export class BeerResolver {
+    constructor(private readonly beerService: BeerService, private readonly executor: DbExecutor) { }
+
     @Query(() => Beer, { nullable: true })
     beer(@Args('discordID') discordID: string): any {
-        const db = new Database(dbPath);
-        const row = db.prepare('SELECT id, discordID, discordUser, count FROM beers WHERE discordID = ?').get(discordID);
-        db.close();
-        return row || null;
+        return this.beerService.findOne(discordID);
     }
 
     @Query(() => [Beer])
     beers(): any[] {
-        const db = new Database(dbPath);
-        const rows = db.prepare('SELECT id, discordID, discordUser, count FROM beers').all();
-        db.close();
-        return rows;
+        return this.beerService.findAll();
     }
 
     @Query(() => BeerStats, { nullable: true })
     beerStats(): any {
-        const db = new Database(dbPath);
-        const row = db.prepare('SELECT id, total, lastUpdated FROM beer_stats WHERE id = 1').get();
-        db.close();
-        return row || null;
+        return this.beerService.getStats();
     }
 
     @Mutation(() => Beer)
-    createBeer(
-        @Args('discordID') discordID: string,
-        @Args('discordUser') discordUser?: string,
-        @Args('count') count?: number,
-    ): any {
-        const db = new Database(dbPath);
-        const insert = db.prepare('INSERT INTO beers(discordID, discordUser, count) VALUES (?, ?, ?)');
-        const info = insert.run(discordID, discordUser || null, Number(count) || 0);
-        const row = db.prepare('SELECT id, discordID, discordUser, count FROM beers WHERE id = ?').get(info.lastInsertRowid);
-        db.close();
-        return row;
+    createBeer(@Args('input') input: CreateBeerInput): any {
+        const op = this.beerService.createOp(input as any);
+        const results = this.executor.apply([op]);
+        return results[0];
     }
 
     @Mutation(() => Beer)
-    updateBeer(
-        @Args('discordID') discordID: string,
-        @Args('discordUser') discordUser?: string,
-        @Args('count') count?: number,
-    ): any {
-        const db = new Database(dbPath);
-        const updateParts: string[] = [];
-        const params: any[] = [];
-        if (typeof discordUser !== 'undefined') {
-            updateParts.push('discordUser = ?');
-            params.push(discordUser);
-        }
-        if (typeof count !== 'undefined') {
-            updateParts.push('count = ?');
-            params.push(Number(count));
-        }
-        if (updateParts.length === 0) {
-            const row = db.prepare('SELECT id, discordID, discordUser, count FROM beers WHERE discordID = ?').get(discordID);
-            db.close();
-            return row;
-        }
-        params.push(discordID);
-        const stmt = db.prepare(`UPDATE beers SET ${updateParts.join(', ')} WHERE discordID = ?`);
-        stmt.run(...params);
-        const row = db.prepare('SELECT id, discordID, discordUser, count FROM beers WHERE discordID = ?').get(discordID);
-        db.close();
-        return row;
+    updateBeer(@Args('discordID') discordID: string, @Args('input') input: UpdateBeerInput): any {
+        const op = this.beerService.updateOp(discordID, input as any);
+        const results = this.executor.apply([op]);
+        return results[0];
     }
 
     @Mutation(() => Boolean)
     deleteBeer(@Args('discordID') discordID: string): boolean {
-        const db = new Database(dbPath);
-        const stmt = db.prepare('DELETE FROM beers WHERE discordID = ?');
-        const info = stmt.run(discordID);
-        db.close();
-        return info.changes > 0;
+        const op = this.beerService.deleteOp(discordID);
+        const results = this.executor.apply([op]);
+        return results[0] === true;
     }
 }
 
 export default BeerResolver;
-
