@@ -17,13 +17,17 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "migrate:up": "bash -lc 'mkdir -p data && for f in migrations/*.sql; do [ -f \"$f\" ] || continue; case \"${f##*/}\" in *.down.sql) continue;; esac; sqlite3 data/beers.db < \"$f\"; done; for f in migrations/*.js; do [ -f \"$f\" ] || continue; case \"${f##*/}\" in *.down.js) continue;; esac; node \"$f\"; done'",
+    "migrate:down": "bash -lc 'for f in $(ls migrations/*.down.js 2>/dev/null | sort -r); do [ -f \"$f\" ] || continue; node \"$f\"; done; for f in $(ls migrations/*.down.sql 2>/dev/null | sort -r); do [ -f \"$f\" ] || continue; sqlite3 data/beers.db < \"$f\"; done'",
+    "migrate:reset": "bash -lc 'npm run migrate:down || true && npm run migrate:up'"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "better-sqlite3": "^13.0.3",
     "discord.js": "^14.26.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
@@ -34,6 +38,7 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
