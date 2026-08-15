@@ -1,15 +1,28 @@
-// Boilerplate GraphQL types for BeerBot
-// Types are plain TypeScript interfaces and may be converted to GraphQL types later.
+import { Field, Int, ObjectType } from '@nestjs/graphql';
 
-export interface Beer {
+@ObjectType()
+export class Beer {
+    @Field(() => Int)
     id: number;
+
+    @Field()
     discordID: string;
+
+    @Field({ nullable: true })
     discordUser?: string | null;
+
+    @Field(() => Int)
     count: number;
 }
 
-export interface BeerStats {
+@ObjectType()
+export class BeerStats {
+    @Field(() => Int)
     id: 1;
+
+    @Field(() => Int)
     total: number;
+
+    @Field({ nullable: true })
     lastUpdated: string | null;
 }
