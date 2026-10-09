@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { WhitelistStoreService } from './whitelist-store.service';

@@ -7,6 +7,8 @@ import {
     Interaction,
 } from 'discord.js';
 import { WhitelistService } from '../../graphql/whitelist/whitelist.service';
+import { SlashCommand } from '../beer-bot/commands/command.interface';
+import { WhitelistForceUpdateCommand } from './commands/whitelist-force-update.command';
 import { WhitelistCommand } from './commands/whitelist.command';
 import { WhitelistSyncService } from './whitelist-sync.service';
 
@@ -14,8 +16,9 @@ import { WhitelistSyncService } from './whitelist-sync.service';
 export class WhitelistBotService implements OnModuleInit {
     private readonly logger = new Logger(WhitelistBotService.name);
     private readonly client: Client;
-    private readonly slashCommands: WhitelistCommand[] = [];
-    private readonly slashByName = new Map<string, WhitelistCommand>();
+    private readonly slashCommands: SlashCommand[] = [];
+    private readonly slashByName = new Map<string, SlashCommand>();
+    private readonly adminDiscordId = '179383654080970752';
 
     constructor(
         private readonly whitelistService: WhitelistService,
@@ -38,7 +41,7 @@ export class WhitelistBotService implements OnModuleInit {
 
         this.registerCommandHandlers();
 
-        this.client.once('ready', () => {
+        this.client.once('clientReady', () => {
             this.logger.log(`Whitelist bot logged in as ${this.client.user?.tag}`);
             void this.registerSlashCommands();
         });
@@ -54,6 +57,7 @@ export class WhitelistBotService implements OnModuleInit {
         this.slashCommands.length = 0;
         this.slashCommands.push(
             new WhitelistCommand(this.whitelistService, this.syncService),
+            new WhitelistForceUpdateCommand(this.syncService, this.adminDiscordId),
         );
         this.slashByName.clear();
         for (const command of this.slashCommands) {

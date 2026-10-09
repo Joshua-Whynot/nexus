@@ -10,32 +10,31 @@ export class WhitelistSyncService {
 
     async syncAll() {
         const usernames = this.store.listUsers().map((row) => row.minecraftUser);
-        if (usernames.length === 0) {
-            return;
-        }
-
         const serverIds = this.getServerIds();
         if (serverIds.length === 0) {
-            this.logger.warn(
-                'PTERODACTYL_SERVER_IDS is not configured; skipping whitelist sync.',
-            );
-            return;
+            throw new Error('PTERODACTYL_SERVER_IDS is not configured.');
         }
 
+        let synced = 0;
+        let failed = 0;
         for (const serverId of serverIds) {
             for (const minecraftUser of usernames) {
-                await this.applyWhitelistToServer(serverId, minecraftUser);
+                try {
+                    await this.applyWhitelistToServer(serverId, minecraftUser);
+                    synced++;
+                } catch {
+                    failed++;
+                }
             }
         }
+
+        return { usernameCount: usernames.length, serverCount: serverIds.length, synced, failed };
     }
 
     async syncUser(minecraftUser: string) {
         const serverIds = this.getServerIds();
         if (serverIds.length === 0) {
-            this.logger.warn(
-                'PTERODACTYL_SERVER_IDS is not configured; skipping whitelist sync.',
-            );
-            return;
+            throw new Error('PTERODACTYL_SERVER_IDS is not configured.');
         }
 
         for (const serverId of serverIds) {
@@ -135,16 +134,16 @@ export class WhitelistSyncService {
     }
 
     private async applyWhitelistToServer(serverId: string, minecraftUser: string) {
-        const { socketUrl, token } = await this.getWebSocketUrl(serverId);
-
-        const socket = new WebSocket(socketUrl, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                Origin: this.getPanelUrl(),
-            },
-        });
-
+        let socket: WebSocket | undefined;
         try {
+            const { socketUrl, token } = await this.getWebSocketUrl(serverId);
+            socket = new WebSocket(socketUrl, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Origin: this.getPanelUrl(),
+                },
+            });
+
             await this.waitForOpen(socket);
 
             socket.send(
@@ -173,8 +172,9 @@ export class WhitelistSyncService {
                 `Failed to sync ${minecraftUser} to server ${serverId}.`,
                 error,
             );
+            throw error;
         } finally {
-            socket.close();
+            socket?.close();
         }
     }
 }
