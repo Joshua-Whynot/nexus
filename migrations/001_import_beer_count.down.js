@@ -3,7 +3,7 @@ const path = require('path');
 const Database = require('better-sqlite3');
 
 const root = process.cwd();
-const dbPath = path.join(root, 'data', 'beers.db');
+const dbPath = path.join(root, 'data', 'bots.db');
 const jsonPath = path.join(root, 'beer-count.json');
 
 function main() {
