@@ -4,6 +4,7 @@ import {
     SlashCommandBuilder,
 } from 'discord.js';
 import { WhitelistService } from '../../../graphql/whitelist/whitelist.service';
+import { MinecraftUsernameAlreadyWhitelistedError } from '../whitelist-store.service';
 import { WhitelistSyncService } from '../whitelist-sync.service';
 
 export class WhitelistCommand {
@@ -47,6 +48,13 @@ export class WhitelistCommand {
                 `✅ Added ${row.minecraftUser} to the whitelist queue for ${interaction.user.tag}.`,
             );
         } catch (error) {
+            if (error instanceof MinecraftUsernameAlreadyWhitelistedError) {
+                await interaction.editReply(
+                    `${minecraftUser} is already whitelisted.`,
+                );
+                return;
+            }
+
             this.logger.error('Failed to add whitelist entry from slash command.', error);
             await interaction.editReply(
                 '❌ I could not add that username to the whitelist queue.',

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 
@@ -9,9 +9,16 @@ export type WhitelistRow = {
     minecraftUser: string;
 };
 
+export class MinecraftUsernameAlreadyWhitelistedError extends Error {
+    constructor() {
+        super('Minecraft username is already whitelisted.');
+        this.name = MinecraftUsernameAlreadyWhitelistedError.name;
+    }
+}
+
 @Injectable()
-export class WhitelistStoreService {
-    private readonly db = new Database(join(process.cwd(), 'data', 'beers.db'));
+export class WhitelistStoreService implements OnModuleDestroy {
+    private readonly db = new Database(join(process.cwd(), 'data', 'bots.db'));
 
     constructor() {
         this.ensureSchema();
@@ -28,6 +35,11 @@ export class WhitelistStoreService {
         )
       `)
             .run();
+        this.db
+            .prepare(
+                'CREATE UNIQUE INDEX IF NOT EXISTS idx_minecraft_whitelist_username ON minecraft_whitelist (minecraftUser COLLATE NOCASE)',
+            )
+            .run();
     }
 
     addUser(payload: {
@@ -41,11 +53,23 @@ export class WhitelistStoreService {
             throw new Error('minecraftUser is required.');
         }
 
-        const info = this.db
-            .prepare(
-                'INSERT INTO minecraft_whitelist (discordID, discordUser, minecraftUser) VALUES (?, ?, ?)',
-            )
-            .run(payload.discordID, payload.discordUser ?? null, minecraftUser);
+        let info: Database.RunResult;
+        try {
+            info = this.db
+                .prepare(
+                    'INSERT INTO minecraft_whitelist (discordID, discordUser, minecraftUser) VALUES (?, ?, ?)',
+                )
+                .run(payload.discordID, payload.discordUser ?? null, minecraftUser);
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                'code' in error &&
+                error.code === 'SQLITE_CONSTRAINT_UNIQUE'
+            ) {
+                throw new MinecraftUsernameAlreadyWhitelistedError();
+            }
+            throw error;
+        }
 
         const row = this.db
             .prepare(
@@ -70,5 +94,9 @@ export class WhitelistStoreService {
 
     clearAll() {
         this.db.prepare('DELETE FROM minecraft_whitelist').run();
+    }
+
+    onModuleDestroy() {
+        this.db.close();
     }
 }
