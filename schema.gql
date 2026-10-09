@@ -21,8 +21,15 @@ input CreateBeerInput {
   discordUser: String
 }
 
+input CreateWhitelistInput {
+  discordID: String!
+  discordUser: String
+  minecraftUser: String!
+}
+
 type Mutation {
   createBeer(input: CreateBeerInput!): Beer!
+  createWhitelist(input: CreateWhitelistInput!): WhitelistEntry!
   deleteBeer(discordID: String!): Boolean!
   updateBeer(discordID: String!, input: UpdateBeerInput!): Beer!
 }
@@ -31,9 +38,17 @@ type Query {
   beer(discordID: String!): Beer
   beerStats: BeerStats
   beers: [Beer!]!
+  whitelistEntries: [WhitelistEntry!]!
 }
 
 input UpdateBeerInput {
   count: Int
   discordUser: String
+}
+
+type WhitelistEntry {
+  discordID: String!
+  discordUser: String
+  id: Int!
+  minecraftUser: String!
 }
